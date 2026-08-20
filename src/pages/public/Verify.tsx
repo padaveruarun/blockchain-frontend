@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,22 +24,40 @@ export default function VerifyPage() {
   const mutation = useVerifyCertificate();
   const [scanError, setScanError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
-  const [scannerInstance, setScannerInstance] = useState<Html5Qrcode | null>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
 
-  const form = useForm<FormValues>({ resolver: zodResolver(schema) });
   const qrRegionId = "qr-reader-region";
+  const form = useForm<FormValues>({ resolver: zodResolver(schema) });
+
+  const destroyScanner = async () => {
+    const scanner = scannerRef.current;
+    scannerRef.current = null;
+    if (scanner) {
+      try {
+        await scanner.stop();
+      } catch {
+        // already stopped
+      }
+      try {
+        await scanner.clear();
+      } catch {
+        // element already removed
+      }
+    }
+  };
 
   const startScanner = async () => {
     setScanError(null);
     setIsScanning(true);
+    await destroyScanner();
     const scanner = new Html5Qrcode(qrRegionId);
-    setScannerInstance(scanner);
+    scannerRef.current = scanner;
     try {
       await scanner.start(
         { facingMode: "environment" },
         { fps: 10, qrbox: { width: 220, height: 220 } },
-        (decoded) => {
-          scanner.stop().catch(() => undefined);
+        async (decoded) => {
+          await destroyScanner();
           setIsScanning(false);
           // Certificate QR codes embed the /verify/<id> URL; fall back to the raw value.
           const match = decoded.match(/\/verify\/([^/?#]+)/);
@@ -49,6 +67,7 @@ export default function VerifyPage() {
         () => undefined,
       );
     } catch (err) {
+      await destroyScanner();
       setIsScanning(false);
       setScanError(
         err instanceof Error ? err.message : "Could not access the camera. Enter the certificate ID manually.",
@@ -58,15 +77,15 @@ export default function VerifyPage() {
 
   const stopScanning = async () => {
     setScanError(null);
-    if (scannerInstance) {
-      try {
-        await scannerInstance.stop();
-      } catch (e) {
-        // already stopped
-      }
-    }
+    await destroyScanner();
     setIsScanning(false);
   };
+
+  useEffect(() => {
+    return () => {
+      destroyScanner();
+    };
+  }, []);
 
   const onSubmit = (values: FormValues) => {
     mutation.mutate({ certificateId: values.certificate_id, method: "CERTIFICATE_ID" });
