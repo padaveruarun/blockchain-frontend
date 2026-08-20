@@ -36,6 +36,7 @@ const institutionSchema = studentSchema.omit({
   institution_id: true,
   course_id: true,
   student_id: true,
+  full_name: true,
   confirm_password: true,
   batch: true,
   graduation_year: true,
