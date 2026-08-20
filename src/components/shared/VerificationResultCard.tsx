@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   BadgeCheck,
   XCircle,
@@ -87,13 +87,22 @@ export function VerificationResultDialog({
   error?: string | null;
 }) {
   const [open, setOpen] = useState(false);
-  const hasActivity = loading || Boolean(result);
+  const lastResultRef = useRef<VerificationResult | null>(null);
 
-  // Show the result exclusively in the modal; it pops as soon as loading starts
-  // or a certificate result arrives (no inline rendering, no navigation).
+  // The modal pops for every verification: re-open on each loading start, and
+  // when a new result arrives (first render after a submission). The previous
+  // `open || result` predicate never changed between searches, so a second
+  // verify after closing the dialog appeared to do nothing until a refresh.
   useEffect(() => {
-    if (hasActivity) setOpen(true);
-  }, [hasActivity]);
+    if (loading) {
+      setOpen(true);
+      return;
+    }
+    if (result && result !== lastResultRef.current) {
+      lastResultRef.current = result;
+      setOpen(true);
+    }
+  }, [loading, result]);
 
   if (!open) return null;
 
